@@ -14,91 +14,123 @@
 #include "i18n.h"
 #include <apt-pkg/error.h>
 #include <algorithm>
+#include <cctype>
+
+namespace {
+std::string Trimmed(std::string value) {
+    RDeb822Source::TrimWhitespace(value);
+    return value;
+}
+
+std::string JoinComments(const std::vector<std::string>& comments) {
+    std::stringstream commentStream;
+    for (size_t i = 0; i < comments.size(); ++i) {
+        if (i > 0) {
+            commentStream << std::endl;
+        }
+        commentStream << comments[i];
+    }
+    return commentStream.str();
+}
+
+bool AddEntryFromFields(const std::map<std::string, std::string>& fields,
+                        const std::vector<std::string>& comments,
+                        std::vector<RDeb822Source::Deb822Entry>& entries) {
+    if (fields.find("Types") == fields.end() ||
+        fields.find("URIs") == fields.end() ||
+        fields.find("Suites") == fields.end()) {
+        return false;
+    }
+
+    RDeb822Source::Deb822Entry entry;
+    entry.Types = fields.at("Types");
+    entry.URIs = fields.at("URIs");
+    entry.Suites = fields.at("Suites");
+    entry.Components = fields.count("Components") ? fields.at("Components") : "";
+    entry.SignedBy = fields.count("Signed-By") ? fields.at("Signed-By") : "";
+    entry.Architectures = fields.count("Architectures") ? fields.at("Architectures") : "";
+    entry.Languages = fields.count("Languages") ? fields.at("Languages") : "";
+    entry.Targets = fields.count("Targets") ? fields.at("Targets") : "";
+    entry.Comment = JoinComments(comments);
+
+    if (fields.count("Enabled")) {
+        std::string enabled_val = fields.at("Enabled");
+        std::transform(enabled_val.begin(), enabled_val.end(), enabled_val.begin(), ::tolower);
+        entry.Enabled = (enabled_val == "yes" || enabled_val == "true" || enabled_val == "1");
+    } else if (fields.count("Disabled")) {
+        std::string disabled_val = fields.at("Disabled");
+        std::transform(disabled_val.begin(), disabled_val.end(), disabled_val.begin(), ::tolower);
+        entry.Enabled = !(disabled_val == "yes" || disabled_val == "true" || disabled_val == "1");
+    } else {
+        entry.Enabled = true;
+    }
+
+    entries.push_back(entry);
+    return true;
+}
+}
 
 bool RDeb822Source::ParseDeb822File(const std::string& path, std::vector<Deb822Entry>& entries) {
     std::ifstream file(path);
     if (!file.is_open()) {
         return false;
     }
+
+    entries.clear();
     std::string line;
     std::map<std::string, std::string> fields;
-    int stanza_count = 0;
+    std::vector<std::string> comments;
+    std::string currentKey;
+    bool sawFields = false;
+
     while (std::getline(file, line)) {
-        if (line.empty()) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        std::string trimmedLine = Trimmed(line);
+
+        if (trimmedLine.empty()) {
             if (!fields.empty()) {
-                Deb822Entry entry;
-                // Check required fields
-                if (fields.find("Types") == fields.end() || fields.find("URIs") == fields.end() || fields.find("Suites") == fields.end()) {
-                    fields.clear();
-                    continue;
-                }
-                entry.Types = fields["Types"];
-                entry.URIs = fields["URIs"];
-                entry.Suites = fields["Suites"];
-                entry.Components = fields.count("Components") ? fields["Components"] : "";
-                entry.SignedBy = fields.count("Signed-By") ? fields["Signed-By"] : "";
-                // Handle Enabled/Disabled fields
-                if (fields.count("Enabled")) {
-                    std::string enabled_val = fields["Enabled"];
-                    std::transform(enabled_val.begin(), enabled_val.end(), enabled_val.begin(), ::tolower);
-                    entry.Enabled = (enabled_val == "yes" || enabled_val == "true" || enabled_val == "1");
-                } else if (fields.count("Disabled")) {
-                    std::string disabled_val = fields["Disabled"];
-                    std::transform(disabled_val.begin(), disabled_val.end(), disabled_val.begin(), ::tolower);
-                    entry.Enabled = !(disabled_val == "yes" || disabled_val == "true" || disabled_val == "1");
-                } else {
-                    entry.Enabled = true; // Default to enabled
-                }
-                entries.push_back(entry);
-                stanza_count++;
+                AddEntryFromFields(fields, comments, entries);
                 fields.clear();
+                comments.clear();
+                currentKey.clear();
+            } else {
+                comments.clear();
             }
             continue;
         }
+
         if (line[0] == '#') {
+            comments.push_back(line);
             continue;
         }
+
+        if (std::isspace(static_cast<unsigned char>(line[0])) && !currentKey.empty()) {
+            fields[currentKey] += "\n" + trimmedLine;
+            continue;
+        }
+
         size_t colon = line.find(':');
         if (colon == std::string::npos) {
             continue;
         }
+
         std::string key = line.substr(0, colon);
         std::string value = line.substr(colon + 1);
-        // Trim whitespace
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        value.erase(0, value.find_first_not_of(" \t"));
-        value.erase(value.find_last_not_of(" \t") + 1);
+        TrimWhitespace(key);
+        TrimWhitespace(value);
         fields[key] = value;
+        currentKey = key;
+        sawFields = true;
     }
+
     // Handle last stanza if file does not end with blank line
     if (!fields.empty()) {
-        Deb822Entry entry;
-        if (fields.find("Types") == fields.end() || fields.find("URIs") == fields.end() || fields.find("Suites") == fields.end()) {
-            // No debug print, just skip
-        } else {
-            entry.Types = fields["Types"];
-            entry.URIs = fields["URIs"];
-            entry.Suites = fields["Suites"];
-            entry.Components = fields.count("Components") ? fields["Components"] : "";
-            entry.SignedBy = fields.count("Signed-By") ? fields["Signed-By"] : "";
-            // Handle Enabled/Disabled fields
-            if (fields.count("Enabled")) {
-                std::string enabled_val = fields["Enabled"];
-                std::transform(enabled_val.begin(), enabled_val.end(), enabled_val.begin(), ::tolower);
-                entry.Enabled = (enabled_val == "yes" || enabled_val == "true" || enabled_val == "1");
-            } else if (fields.count("Disabled")) {
-                std::string disabled_val = fields["Disabled"];
-                std::transform(disabled_val.begin(), disabled_val.end(), disabled_val.begin(), ::tolower);
-                entry.Enabled = !(disabled_val == "yes" || disabled_val == "true" || disabled_val == "1");
-            } else {
-                entry.Enabled = true; // Default to enabled
-            }
-            entries.push_back(entry);
-            stanza_count++;
-        }
+        AddEntryFromFields(fields, comments, entries);
     }
-    return true;
+
+    return !entries.empty() || !sawFields;
 }
 
 bool RDeb822Source::WriteDeb822File(const std::string& path, const std::vector<Deb822Entry>& entries) {
@@ -332,4 +364,4 @@ bool RDeb822Source::ParseStanza(std::ifstream& file, std::map<std::string, std::
     }
     
     return !fields.empty();
-} 
+}

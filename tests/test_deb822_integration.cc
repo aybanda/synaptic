@@ -5,6 +5,12 @@
 #include <fstream>
 #include <sstream>
 #include <cstdio>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
 
 class Deb822Test : public ::testing::Test {
 protected:
@@ -209,7 +215,7 @@ TEST_F(Deb822Test, SourcesListIntegration) {
 
     // Clean up
     remove(newFile.c_str());
-} 
+}
 
 TEST_F(Deb822Test, ParseAdditionalFields) {
     std::ofstream ofs(testFile.c_str());
@@ -304,8 +310,7 @@ TEST_F(Deb822Test, WriteAndReadAdditionalFields) {
 
     // Read it back
     std::vector<RDeb822Source::Deb822Entry> entries;
-    std::string error;
-    EXPECT_TRUE(RDeb822Source::ParseDeb822File(tempFile, entries, error)) << error;
+    EXPECT_TRUE(RDeb822Source::ParseDeb822File(tempFile, entries));
     EXPECT_EQ(entries.size(), 1);
 
     // Verify fields
@@ -321,4 +326,4 @@ TEST_F(Deb822Test, WriteAndReadAdditionalFields) {
 
     // Clean up
     std::remove(tempFile.c_str());
-} 
+}

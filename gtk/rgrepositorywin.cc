@@ -403,9 +403,6 @@ bool RGRepositoryEditor::Run()
    // keep a backup of the orginal list
    _savedList.ReadSources();
 
-   // Add debug print statement here
-   g_print("DEBUG: Number of source records read into _lst: %lu\n", _lst.SourceRecords.size());
-
    if (_lst.ReadVendors() == false) {
       _userDialog->showErrors();
       return false;
@@ -419,9 +416,6 @@ bool RGRepositoryEditor::Run()
         it != _lst.SourceRecords.end(); it++) {
       if ((*it)->Type & SourcesList::Comment)
          continue;
-
-      // Add debug print for each source being added to the display
-      g_print("DEBUG: Adding source to display - URI: %s, Type: %s\n", (*it)->URI.c_str(), (*it)->GetType().c_str());
 
       string Sections;
       for (unsigned int J = 0; J < (*it)->NumSections; J++) {
@@ -444,9 +438,6 @@ bool RGRepositoryEditor::Run()
       }
       // --- END NEW ---
 
-      // Add another debug print before appending to the list store
-      g_print("DEBUG: Preparing to append to list store for URI: %s\n", (*it)->URI.c_str());
-
       gtk_list_store_append(_sourcesListStore, &iter);
       gtk_list_store_set(_sourcesListStore, &iter,
                          STATUS_COLUMN, !((*it)->Type &
@@ -461,8 +452,6 @@ bool RGRepositoryEditor::Run()
                          (*it)->Type & SourcesList::Disabled ? &_gray : NULL,
                          -1);
 
-      // Add debug print after setting data in the list store
-      g_print("DEBUG: Successfully set data for URI: %s\n", (*it)->URI.c_str());
    }
 
 
