@@ -37,7 +37,7 @@ libsynaptic_a_SOURCES =\
 	rcacheactor.cc \
 	rcacheactor.h \
 	rpackagemanager.cc \
-	rpackagemanager.h \ 
+	rpackagemanager.h \
 	rpackagelistactor.cc \
 	rpackagelistactor.h \
 	rtagcollbuilder.cc \
@@ -50,5 +50,4 @@ libsynaptic_a_SOURCES =\
 	ruserdialog.cc \
 	sections_trans.h \
 	sections_trans.cc 
-
 
